@@ -1,0 +1,13 @@
+# IDE and Python files
+.idea/
+__pycache__/
+.venv/
+
+# Directories used by scripts
+cache/
+logs/
+models/
+tensorboard/
+
+# Data
+*.csv

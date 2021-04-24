@@ -1,0 +1,20 @@
+from functools import wraps
+import os
+
+import numpy as np
+
+
+def cache_np(filename: str):
+    def wrapper(func):
+        @wraps(func)
+        def with_caching(*args, **kwargs):
+            if os.path.exists(filename):
+                return np.load(filename)
+
+            data = func(*args, **kwargs)
+
+            np.save(filename, data)
+
+            return data
+        return with_caching
+    return wrapper
