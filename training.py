@@ -14,16 +14,16 @@ from dataset import Dataset
 from loaders import DataLoader
 from models import create_model
 
-# physical_devices = tf.config.list_physical_devices('GPU')
-# tf.config.experimental.set_memory_growth(physical_devices[0], enable=True)
+physical_devices = tf.config.list_physical_devices('GPU')
+tf.config.experimental.set_memory_growth(physical_devices[0], enable=True)
 
 
 FILENAME = 'TrainingValidationData_200k_shuffle.csv'
 
-SIMPLE_BATCH_SIZE = 12500
-REC_BATCH_SIZE = 12500
-CONV_BATCH_SIZE = 12500
-PERM_BATCH_SIZE = 1250
+SIMPLE_BATCH_SIZE = 1000
+REC_BATCH_SIZE = 1000
+CONV_BATCH_SIZE = 1000
+PERM_BATCH_SIZE = 1000
 
 BATCH_SIZES = {
     'simple': SIMPLE_BATCH_SIZE,
@@ -77,9 +77,10 @@ def train_model(model: keras.Model, data_train: DataLoader, data_validation: Dat
 
 
 def create_and_train_model(dataset: Dataset, model_type: str, method: str, epochs: int = 50,
-                           shuffle_objects: bool = False, save_model: bool = True, log: bool = True):
+                           shuffle_objects: bool = False, noise_amount: float = 0.0,
+                           save_model: bool = True, log: bool = True):
     data_train = dataset.train_loader(model_type, method, batch_size=BATCH_SIZES[model_type],
-                                      shuffle_objects=shuffle_objects)
+                                      shuffle_objects=shuffle_objects, noise_amount=noise_amount)
     data_validation = dataset.validation_loader(model_type, method, batch_size=BATCH_SIZES[model_type],
                                                 shuffle_data=False)
 
@@ -88,9 +89,12 @@ def create_and_train_model(dataset: Dataset, model_type: str, method: str, epoch
     if shuffle_objects:
         slug += '-shuffle'
 
+    if noise_amount > 0:
+        slug += f'-{noise_amount}'
+
     if log:
         logger.info('=' * 70)
-        logger.info(f'NOW TRAINING: {model_type} - {method} - shuffle={shuffle_objects}')
+        logger.info(f'NOW TRAINING: {model_type} - {method} - shuffle={shuffle_objects} - noise={noise_amount}')
         logger.info('=' * 70)
 
     model = create_model(model_type=model_type, method=method, input_size=data_train.input_size)
@@ -176,16 +180,17 @@ def try_combination(epochs: int):
 
 
 def train_all(epochs: int):
-    dataset = Dataset(FILENAME, limit=4 * SIMPLE_BATCH_SIZE)
+    dataset = Dataset(FILENAME)
 
     for model_type in ['simple', 'recurrent', 'convolution', 'permutation']:
         for method in ['binary', 'multi']:
-            for shuffle in [False]:
-                create_and_train_model(dataset, model_type, method, epochs, log=True, save_model=False,
-                                       shuffle_objects=shuffle)
+            for shuffle in [False, True]:
+                for noise in [0, 0.1]:
+                    create_and_train_model(dataset, model_type, method, epochs, log=True, save_model=False,
+                                           shuffle_objects=shuffle, noise_amount=noise)
                 gc.collect()
 
 
 if __name__ == '__main__':
     setup()
-    train_all(100)
+    train_all(200)

@@ -8,7 +8,8 @@ from tensorflow import keras
 
 class DataLoader(keras.utils.Sequence, ABC):
     def __init__(self, data_events: np.array, data_objects: np.array, labels: np.array,
-                 batch_size: int = 64, shuffle_data: bool = True, shuffle_objects: bool = False):
+                 batch_size: int = 64, shuffle_data: bool = True, shuffle_objects: bool = False,
+                 noise_amount: float = 0.0):
         self.data_events = tf.convert_to_tensor(data_events)
         self.data_objects = tf.convert_to_tensor(data_objects)
         self.labels = tf.convert_to_tensor(labels)
@@ -16,8 +17,10 @@ class DataLoader(keras.utils.Sequence, ABC):
         self.batch_size = batch_size
         self.shuffle_data = shuffle_data
         self.shuffle_objects = shuffle_objects
+        self.noise_amount = noise_amount
 
         self.idx = np.arange(self.labels.shape[0])
+        self.object_idx = np.arange(self.data_objects.shape[1])
 
     @property
     @abstractmethod
@@ -28,12 +31,38 @@ class DataLoader(keras.utils.Sequence, ABC):
     def get_inputs(self, idx: Optional[np.array] = None) -> Union[np.array, List[np.array]]:
         pass
 
+    def get_data_by_index(self, idx: Optional[np.array] = None):
+        if idx is None:
+            data_events = self.data_events
+            data_objects = self.data_objects
+        else:
+            data_events = tf.gather(self.data_events, idx)
+            data_objects = tf.gather(self.data_objects, idx)
+
+        if self.shuffle_objects:
+            data_objects = tf.map_fn(lambda t: tf.gather(t, self.object_idx), data_objects)
+
+        if self.noise_amount > 0:
+            noise_events = tf.random.normal(data_events.shape, stddev=self.noise_amount,
+                                            dtype=tf.dtypes.double)
+            # Only add noise to the continuous object data
+            num_samples, num_objects, num_features = data_objects.shape
+            noise_objects = tf.concat([
+                tf.zeros((num_samples, num_objects, num_features - 4), dtype=tf.dtypes.double),
+                tf.random.normal((num_samples, num_objects, 4), dtype=tf.dtypes.double),
+            ], axis=2)
+
+            data_events += noise_events
+            data_objects += noise_objects
+
+        return data_events, data_objects
+
     def on_epoch_end(self) -> None:
         if self.shuffle_data:
             np.random.shuffle(self.idx)
 
         if self.shuffle_objects:
-            self.data_objects = tf.map_fn(tf.random.shuffle, self.data_objects)
+            np.random.shuffle(self.object_idx)
 
     def __getitem__(self, index: int) -> Tuple[Union[np.array, List[np.array]], np.array]:
         idx = self.idx[index * self.batch_size:(index + 1) * self.batch_size]
@@ -49,12 +78,7 @@ class SimpleLoader(DataLoader):
         return self.data_objects.shape[1] * self.data_objects.shape[2] + self.data_events.shape[1],
 
     def get_inputs(self, idx: Optional[np.array] = None) -> Union[np.array, List[np.array]]:
-        if idx is None:
-            data_events = self.data_events
-            data_objects = self.data_objects
-        else:
-            data_events = tf.gather(self.data_events, idx)
-            data_objects = tf.gather(self.data_objects, idx)
+        data_events, data_objects = self.get_data_by_index(idx)
 
         flattened = tf.reshape(data_objects, (data_objects.shape[0], -1))
         return np.concatenate([data_events, flattened], axis=1)
@@ -66,10 +90,9 @@ class RecurrentLoader(DataLoader):
         return self.data_objects.shape[1:]
 
     def get_inputs(self, idx: Optional[np.array] = None) -> Union[np.array, List[np.array]]:
-        if idx is None:
-            return [self.data_events, self.data_objects]
-        return [tf.gather(self.data_events, idx),
-                tf.gather(self.data_objects, idx)]
+        data_events, data_objects = self.get_data_by_index(idx)
+
+        return [data_events, data_objects]
 
 
 class ConvolutionLoader(DataLoader):
@@ -78,12 +101,7 @@ class ConvolutionLoader(DataLoader):
         return self.data_objects.shape[1] * self.data_objects.shape[2], 1
 
     def get_inputs(self, idx: Optional[np.array] = None) -> Union[np.array, List[np.array]]:
-        if idx is None:
-            data_events = self.data_events
-            data_objects = self.data_objects
-        else:
-            data_events = tf.gather(self.data_events, idx)
-            data_objects = tf.gather(self.data_objects, idx)
+        data_events, data_objects = self.get_data_by_index(idx)
 
         return [data_events, tf.reshape(data_objects, (data_objects.shape[0], -1, 1))]
 
@@ -94,11 +112,6 @@ class PermutationLoader(DataLoader):
         return self.data_objects.shape[2], self.data_objects.shape[1]
 
     def get_inputs(self, idx: Optional[np.array] = None) -> Union[np.array, List[np.array]]:
-        if idx is None:
-            data_events = self.data_events
-            data_objects = self.data_objects
-        else:
-            data_events = tf.gather(self.data_events, idx)
-            data_objects = tf.gather(self.data_objects, idx)
+        data_events, data_objects = self.get_data_by_index(idx)
 
         return [data_events, tf.transpose(data_objects, [0, 2, 1])]
