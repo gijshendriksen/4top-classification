@@ -137,7 +137,7 @@ def create_convolution_model(input_size):
 
 
 def create_permutation_model(input_size):
-    def block(num_units=64):
+    def block(num_units=128):
         model = keras.Sequential()
 
         model.add(NINLayer(num_units))
@@ -171,12 +171,11 @@ def create_permutation_model(input_size):
 
     conc = layers.Concatenate()([input_cont, flatten])
 
-    dense1 = layers.Dense(512, activation='relu')(conc)
+    dense1 = layers.Dense(1024, activation='relu')(conc)
     drop1 = layers.Dropout(0.2)(dense1)
-    dense2 = layers.Dense(512, activation='relu')(drop1)
+    dense2 = layers.Dense(1024, activation='relu')(drop1)
     drop2 = layers.Dropout(0.2)(dense2)
-    dense3 = layers.Dense(256, activation='relu')(drop2)
-    out = layers.Dropout(0.2)(dense3)
+    out = layers.Dense(512, activation='relu')(drop2)
 
 
     # Omit final layer as it is added by the wrapper function
@@ -223,13 +222,15 @@ def create_model(model_type, input_size, method='binary', summary=True):
 
     if method == 'binary':
         activation = layers.Dense(1, activation='sigmoid')(outputs)
+        loss = 'binary_crossentropy'
     elif method == 'multi':
         activation = layers.Dense(5, activation='softmax')(outputs)
+        loss = 'categorical_crossentropy'
     else:
         raise ValueError(f'Method "{method}" not supported')
 
     model = keras.Model(inputs=inputs, outputs=activation)
-    model.compile(optimizer='adam', loss='bce', metrics='acc')
+    model.compile(optimizer='adam', loss=loss, metrics='acc')
 
     if summary:
         model.summary()

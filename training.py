@@ -14,21 +14,16 @@ from dataset import Dataset
 from loaders import DataLoader
 from models import create_model
 
-physical_devices = tf.config.list_physical_devices('GPU')
-tf.config.experimental.set_memory_growth(physical_devices[0], enable=True)
+# physical_devices = tf.config.list_physical_devices('GPU')
+# tf.config.experimental.set_memory_growth(physical_devices[0], enable=True)
 
 
 FILENAME = 'TrainingValidationData_200k_shuffle.csv'
 
-# SIMPLE_BATCH_SIZE = 12500
-# REC_BATCH_SIZE = 12500 // 2
-# CONV_BATCH_SIZE = 250
-# PERM_BATCH_SIZE = 5
-
-SIMPLE_BATCH_SIZE = 25
-REC_BATCH_SIZE = 25
-CONV_BATCH_SIZE = 25
-PERM_BATCH_SIZE = 25
+SIMPLE_BATCH_SIZE = 12500
+REC_BATCH_SIZE = 12500
+CONV_BATCH_SIZE = 12500
+PERM_BATCH_SIZE = 1250
 
 BATCH_SIZES = {
     'simple': SIMPLE_BATCH_SIZE,
@@ -64,8 +59,8 @@ def train_model(model: keras.Model, data_train: DataLoader, data_validation: Dat
         raise ValueError('Cannot save model or log training without a slug')
 
     callbacks = [
-        keras.callbacks.EarlyStopping(patience=15, restore_best_weights=True, verbose=1),
-        keras.callbacks.ReduceLROnPlateau(verbose=1, patience=5),
+        keras.callbacks.EarlyStopping(patience=30, restore_best_weights=True, verbose=1),
+        keras.callbacks.ReduceLROnPlateau(verbose=1, patience=10),
     ]
 
     if save_model:
@@ -102,7 +97,7 @@ def create_and_train_model(dataset: Dataset, model_type: str, method: str, epoch
 
     train_model(model, data_train, data_validation, epochs=epochs, save_model=save_model, log=log, slug=slug)
 
-    prediction = model(data_validation.get_inputs()).numpy()
+    prediction = model.predict(data_validation.get_inputs(), batch_size=BATCH_SIZES[model_type])
     actual = data_validation.labels.numpy()
 
     if method == 'multi' and log:
@@ -183,15 +178,14 @@ def try_combination(epochs: int):
 def train_all(epochs: int):
     dataset = Dataset(FILENAME, limit=4 * SIMPLE_BATCH_SIZE)
 
-    # for model_type in ['permutation']:
-    for model_type in ['recurrent', 'convolution']:
+    for model_type in ['simple', 'recurrent', 'convolution', 'permutation']:
         for method in ['binary', 'multi']:
-            for shuffle in [False, True]:
-                create_and_train_model(dataset, model_type, method, epochs, log=True, save_model=True,
+            for shuffle in [False]:
+                create_and_train_model(dataset, model_type, method, epochs, log=True, save_model=False,
                                        shuffle_objects=shuffle)
                 gc.collect()
 
 
 if __name__ == '__main__':
     setup()
-    train_all(1)
+    train_all(100)
