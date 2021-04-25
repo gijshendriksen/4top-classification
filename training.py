@@ -12,7 +12,7 @@ from sklearn.metrics import classification_report
 
 from dataset import Dataset
 from loaders import DataLoader
-from models import create_model
+from models import MODELS, create_model
 
 # physical_devices = tf.config.list_physical_devices('GPU')
 # tf.config.experimental.set_memory_growth(physical_devices[0], enable=True)
@@ -222,7 +222,7 @@ def test_masking(epochs: int):
 def train_all(epochs: int):
     dataset = Dataset(FILENAME)
 
-    for model_type in ['simple', 'recurrent', 'convolution', 'permutation']:
+    for model_type in MODELS:
         for method in ['binary', 'multi']:
             for shuffle in [False, True]:
                 for noise in [0, 0.1]:
@@ -233,4 +233,4 @@ def train_all(epochs: int):
 
 if __name__ == '__main__':
     setup()
-    test_masking(200)
+    train_all(200)

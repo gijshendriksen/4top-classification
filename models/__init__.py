@@ -1,1 +1,1 @@
-from models.models import create_model
+from models.models import MODELS, create_model

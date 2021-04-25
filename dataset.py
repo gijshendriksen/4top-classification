@@ -1,6 +1,6 @@
 from typing import Callable, Dict, List, Optional,  Tuple
 
-from sklearn.preprocessing import MinMaxScaler
+from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split
 import numpy as np
 from tensorflow import keras
@@ -61,7 +61,7 @@ class Dataset:
         Returns the basic data for all events.
         Output shape: (N, 2)
         """
-        scaler = MinMaxScaler()
+        scaler = StandardScaler()
 
         event_data = scaler.fit_transform([
             [e.met, e.metphi]
@@ -78,7 +78,7 @@ class Dataset:
         Returns the object data for all events.
         Output shape: (N, max_objects, num_classes + 5)
         """
-        object_scaler = MinMaxScaler()
+        object_scaler = StandardScaler()
         object_scaler.fit([
             [o.e, o.pt, o.eta, o.phi]
             for e in self.data
@@ -95,7 +95,7 @@ class Dataset:
 
         return object_data
 
-    def _objects_to_input(self, event: Event, object_scaler: MinMaxScaler) -> np.array:
+    def _objects_to_input(self, event: Event, object_scaler: StandardScaler) -> np.array:
         """
         Returns a numpy array with the object data for a single event.
         Output shape: (num_objects, num_classes + 5)
