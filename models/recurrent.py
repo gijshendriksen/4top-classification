@@ -6,7 +6,8 @@ def create_recurrent_model(input_size):
     input_cont = keras.Input((2,))
     input_rec = keras.Input(input_size)
 
-    lstm1 = layers.LSTM(64, return_sequences=True)(input_rec)
+    masked = layers.Masking()(input_rec)
+    lstm1 = layers.LSTM(64, return_sequences=True)(masked)
     lstm2 = layers.LSTM(64, return_sequences=True)(lstm1)
     lstm3 = layers.LSTM(64, return_sequences=True)(lstm2)
     lstm4 = layers.LSTM(64)(lstm3)

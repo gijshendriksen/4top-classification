@@ -122,9 +122,17 @@ def create_and_train_model(dataset: Dataset, model_type: str, method: str, epoch
         true_binary = actual[:, dataset.label_lookup['4top']].astype(bool)
 
         logger.info('-' * 60)
-        logger.info('Multi to binary classification score')
+        logger.info('Multi to binary classification score (>= 0.5)')
         logger.info('-' * 60)
         logger.info(classification_report(true_binary, predicted_binary))
+
+        predicted_binary_2 = predicted_labels == dataset.label_lookup['4top']
+
+        logger.info('-' * 60)
+        logger.info('Multi to binary classification score (max)')
+        logger.info('-' * 60)
+        logger.info(classification_report(true_binary, predicted_binary_2))
+
     elif method == 'binary' and log:
         predicted_labels = prediction.reshape((-1,)) >= 0.5
         true_labels = actual.reshape((-1,))
@@ -195,6 +203,22 @@ def experiment1(epochs: int):
         create_and_train_model(dataset, model_type, 'binary', epochs, log=True, save_model=False)
 
 
+def experiment2(epochs: int):
+    dataset = Dataset(FILENAME)
+
+    models = ['dense', 'dense_deep', 'dense_wide']
+
+    for model_type in models:
+        create_and_train_model(dataset, model_type, 'multi', epochs, log=True, save_model=False)
+
+
+def test_masking(epochs: int):
+    dataset = Dataset(FILENAME)
+
+    for method in ['binary', 'multi']:
+        create_and_train_model(dataset, 'recurrent', method, epochs, log=True, save_model=False)
+
+
 def train_all(epochs: int):
     dataset = Dataset(FILENAME)
 
@@ -209,4 +233,4 @@ def train_all(epochs: int):
 
 if __name__ == '__main__':
     setup()
-    experiment1(200)
+    test_masking(200)

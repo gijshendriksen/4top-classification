@@ -51,7 +51,13 @@ class Dataset:
         if self.limit:
             lines = lines[:self.limit]
 
-        data = [Event.read_event(line) for line in tqdm(lines, 'Loading data')]
+        data = []
+        for line in tqdm(lines, 'Loading data'):
+            event = Event.read_event(line)
+            if event.objects:
+                data.append(event)
+
+        # data = [Event.read_event(line) for line in tqdm(lines, 'Loading data')]
 
         return data
 
