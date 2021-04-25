@@ -13,7 +13,7 @@ from utils import cache_np
 
 class Dataset:
     loaders: Dict[str, Callable[..., DataLoader]] = {
-        'simple': SimpleLoader,
+        'dense': SimpleLoader,
         'recurrent': RecurrentLoader,
         'convolution': ConvolutionLoader,
         'permutation': PermutationLoader,
@@ -156,6 +156,8 @@ class Dataset:
             labels = self.multiclass_labels[idx]
         else:
             raise ValueError(f'Output type "{output}" not supported')
+
+        loader = loader.split('_')[0]
 
         return self.loaders[loader](
             data_events=self.event_data[idx],

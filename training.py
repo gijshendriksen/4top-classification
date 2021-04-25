@@ -14,19 +14,19 @@ from dataset import Dataset
 from loaders import DataLoader
 from models import create_model
 
-physical_devices = tf.config.list_physical_devices('GPU')
-tf.config.experimental.set_memory_growth(physical_devices[0], enable=True)
+# physical_devices = tf.config.list_physical_devices('GPU')
+# tf.config.experimental.set_memory_growth(physical_devices[0], enable=True)
 
 
 FILENAME = 'TrainingValidationData_200k_shuffle.csv'
 
-SIMPLE_BATCH_SIZE = 1000
+DENSE_BATCH_SIZE = 1000
 REC_BATCH_SIZE = 1000
 CONV_BATCH_SIZE = 1000
-PERM_BATCH_SIZE = 1000
+PERM_BATCH_SIZE = 500
 
 BATCH_SIZES = {
-    'simple': SIMPLE_BATCH_SIZE,
+    'dense': DENSE_BATCH_SIZE,
     'recurrent': REC_BATCH_SIZE,
     'convolution': CONV_BATCH_SIZE,
     'permutation': PERM_BATCH_SIZE,
@@ -35,7 +35,7 @@ BATCH_SIZES = {
 TIMESTAMP = datetime.now().strftime('%Y%m%d-%H%M')
 
 TENSORBOARD_DIR = './tensorboard'
-MODEL_DIR = f'./models/{TIMESTAMP}'
+MODEL_DIR = f'./saved_models/{TIMESTAMP}'
 LOG_DIR = f'./logs/{TIMESTAMP}'
 CACHE_DIR = './cache'
 
@@ -79,10 +79,10 @@ def train_model(model: keras.Model, data_train: DataLoader, data_validation: Dat
 def create_and_train_model(dataset: Dataset, model_type: str, method: str, epochs: int = 50,
                            shuffle_objects: bool = False, noise_amount: float = 0.0,
                            save_model: bool = True, log: bool = True):
-    data_train = dataset.train_loader(model_type, method, batch_size=BATCH_SIZES[model_type],
+    batch_size = BATCH_SIZES[model_type.split('_')[0]]
+    data_train = dataset.train_loader(model_type, method, batch_size=batch_size,
                                       shuffle_objects=shuffle_objects, noise_amount=noise_amount)
-    data_validation = dataset.validation_loader(model_type, method, batch_size=BATCH_SIZES[model_type],
-                                                shuffle_data=False)
+    data_validation = dataset.validation_loader(model_type, method, batch_size=batch_size, shuffle_data=False)
 
     slug = f'{TIMESTAMP}-{model_type}-{method}'
 
@@ -97,11 +97,16 @@ def create_and_train_model(dataset: Dataset, model_type: str, method: str, epoch
         logger.info(f'NOW TRAINING: {model_type} - {method} - shuffle={shuffle_objects} - noise={noise_amount}')
         logger.info('=' * 70)
 
+    print('=' * 70)
+    print(f'NOW TRAINING: {model_type} - {method} - shuffle={shuffle_objects} - noise={noise_amount}')
+    print(slug)
+    print('=' * 70)
+
     model = create_model(model_type=model_type, method=method, input_size=data_train.input_size)
 
     train_model(model, data_train, data_validation, epochs=epochs, save_model=save_model, log=log, slug=slug)
 
-    prediction = model.predict(data_validation.get_inputs(), batch_size=BATCH_SIZES[model_type])
+    prediction = model.predict(data_validation.get_inputs(), batch_size=batch_size)
     actual = data_validation.labels.numpy()
 
     if method == 'multi' and log:
@@ -135,11 +140,13 @@ def create_and_train_model(dataset: Dataset, model_type: str, method: str, epoch
 def try_combination(epochs: int):
     dataset = Dataset(FILENAME)
 
-    data_train_binary = dataset.train_loader('permutation', 'binary', batch_size=SIMPLE_BATCH_SIZE)
-    data_validation_binary = dataset.validation_loader('permutation', 'binary', batch_size=SIMPLE_BATCH_SIZE)
+    batch_size = BATCH_SIZES['permutation']
 
-    data_train_multi = dataset.train_loader('permutation', 'multi', batch_size=SIMPLE_BATCH_SIZE)
-    data_validation_multi = dataset.validation_loader('permutation', 'multi', batch_size=SIMPLE_BATCH_SIZE)
+    data_train_binary = dataset.train_loader('permutation', 'binary', batch_size=batch_size)
+    data_validation_binary = dataset.validation_loader('permutation', 'binary', batch_size=batch_size)
+
+    data_train_multi = dataset.train_loader('permutation', 'multi', batch_size=batch_size)
+    data_validation_multi = dataset.validation_loader('permutation', 'multi', batch_size=batch_size)
 
     binary_model = create_model('permutation', method='binary', input_size=data_train_binary.input_size, summary=True)
     multi_model = create_model('permutation', method='multi', input_size=data_train_multi.input_size, summary=True)
@@ -148,8 +155,8 @@ def try_combination(epochs: int):
                 slug='perm_test')
     train_model(multi_model, data_train_multi, data_validation_multi, epochs=epochs, save_model=False, log=False)
 
-    pred_binary = binary_model.predict(data_validation_binary.get_inputs(), batch_size=SIMPLE_BATCH_SIZE)
-    pred_multi = multi_model.predict(data_validation_multi.get_inputs(), batch_size=SIMPLE_BATCH_SIZE)
+    pred_binary = binary_model.predict(data_validation_binary.get_inputs(), batch_size=batch_size)
+    pred_multi = multi_model.predict(data_validation_multi.get_inputs(), batch_size=batch_size)
 
     pred_backgrounds = 1 - pred_binary
     factors = np.concatenate([pred_binary, pred_backgrounds, pred_backgrounds, pred_backgrounds, pred_backgrounds], axis=1)
@@ -179,6 +186,15 @@ def try_combination(epochs: int):
     print(classification_report(true_multi, combined_multi))
 
 
+def experiment1(epochs: int):
+    dataset = Dataset(FILENAME)
+
+    models = ['dense', 'dense_deep', 'dense_wide']
+
+    for model_type in models:
+        create_and_train_model(dataset, model_type, 'binary', epochs, log=True, save_model=False)
+
+
 def train_all(epochs: int):
     dataset = Dataset(FILENAME)
 
@@ -193,4 +209,4 @@ def train_all(epochs: int):
 
 if __name__ == '__main__':
     setup()
-    train_all(200)
+    experiment1(200)

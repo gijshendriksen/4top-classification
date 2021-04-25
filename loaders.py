@@ -20,7 +20,8 @@ class DataLoader(keras.utils.Sequence, ABC):
         self.noise_amount = noise_amount
 
         self.idx = np.arange(self.labels.shape[0])
-        self.object_idx = np.arange(self.data_objects.shape[1])
+
+        self.on_epoch_end()
 
     @property
     @abstractmethod
@@ -38,9 +39,6 @@ class DataLoader(keras.utils.Sequence, ABC):
         else:
             data_events = tf.gather(self.data_events, idx)
             data_objects = tf.gather(self.data_objects, idx)
-
-        if self.shuffle_objects:
-            data_objects = tf.map_fn(lambda t: tf.gather(t, self.object_idx), data_objects)
 
         if self.noise_amount > 0:
             noise_events = tf.random.normal(data_events.shape, stddev=self.noise_amount,
@@ -62,7 +60,9 @@ class DataLoader(keras.utils.Sequence, ABC):
             np.random.shuffle(self.idx)
 
         if self.shuffle_objects:
-            np.random.shuffle(self.object_idx)
+            data_objects = tf.transpose(self.data_objects, [1, 0, 2])
+            data_objects = tf.random.shuffle(data_objects)
+            self.data_objects = tf.transpose(data_objects, [1, 0, 2])
 
     def __getitem__(self, index: int) -> Tuple[Union[np.array, List[np.array]], np.array]:
         idx = self.idx[index * self.batch_size:(index + 1) * self.batch_size]

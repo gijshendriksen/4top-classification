@@ -6,7 +6,7 @@ __pycache__/
 # Directories used by scripts
 cache/
 logs/
-models/
+saved_models/
 tensorboard/
 
 # Data
