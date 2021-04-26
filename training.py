@@ -2,13 +2,13 @@ from datetime import datetime
 import gc
 import logging
 import os
+import sys
 from typing import Optional
 
-import tensorflow as tf
 from tensorflow import keras
 
 import numpy as np
-from sklearn.metrics import classification_report
+from sklearn.metrics import classification_report, f1_score, roc_auc_score
 
 from dataset import Dataset
 from loaders import DataLoader
@@ -50,6 +50,7 @@ def setup():
     os.makedirs(CACHE_DIR, exist_ok=True)
 
     logger.addHandler(logging.FileHandler(f'{LOG_DIR}/training.log'))
+    logger.addHandler(logging.StreamHandler(sys.stdout))
     logger.setLevel(logging.INFO)
 
 
@@ -58,14 +59,18 @@ def train_model(model: keras.Model, data_train: DataLoader, data_validation: Dat
     if slug is None and (save_model or log):
         raise ValueError('Cannot save model or log training without a slug')
 
+    monitor = 'val_auc'
+    mode = 'max'
+
     callbacks = [
-        keras.callbacks.EarlyStopping(patience=30, restore_best_weights=True, verbose=1),
-        keras.callbacks.ReduceLROnPlateau(verbose=1, patience=10),
+        keras.callbacks.EarlyStopping(patience=30, restore_best_weights=True, verbose=1, monitor=monitor, mode=mode),
+        keras.callbacks.ReduceLROnPlateau(verbose=1, patience=10, monitor=monitor, mode=mode),
     ]
 
     if save_model:
         callbacks.append(keras.callbacks.ModelCheckpoint(f'{MODEL_DIR}/{slug}.hdf5', verbose=1,
-                                                         save_best_only=True, save_weights_only=True))
+                                                         save_best_only=True, save_weights_only=True,
+                                                         monitor=monitor, mode=mode))
 
     if log:
         callbacks.append(keras.callbacks.TensorBoard(log_dir=f'{TENSORBOARD_DIR}/{slug}'))
@@ -92,55 +97,65 @@ def create_and_train_model(dataset: Dataset, model_type: str, method: str, epoch
     if noise_amount > 0:
         slug += f'-{noise_amount}'
 
-    if log:
-        logger.info('=' * 70)
-        logger.info(f'NOW TRAINING: {model_type} - {method} - shuffle={shuffle_objects} - noise={noise_amount}')
-        logger.info('=' * 70)
-
-    print('=' * 70)
-    print(f'NOW TRAINING: {model_type} - {method} - shuffle={shuffle_objects} - noise={noise_amount}')
-    print(slug)
-    print('=' * 70)
+    logger.info('=' * 70)
+    logger.info(f'NOW TRAINING: {slug} (model={model_type}, output={method}, '
+                f'shuffle={shuffle_objects}, noise={noise_amount})')
+    logger.info('=' * 70)
 
     model = create_model(model_type=model_type, method=method, input_size=data_train.input_size)
 
     train_model(model, data_train, data_validation, epochs=epochs, save_model=save_model, log=log, slug=slug)
 
     prediction = model.predict(data_validation.get_inputs(), batch_size=batch_size)
-    actual = data_validation.labels.numpy()
+    actual = data_validation.get_labels()
 
-    if method == 'multi' and log:
+    logger.info('ROC score: %.4f', roc_auc_score(actual, prediction))
+
+    if method == 'multi':
         predicted_labels = np.argmax(prediction, axis=1)
         true_labels = np.argmax(actual, axis=1)
 
-        logger.info('-' * 60)
-        logger.info('Multi-label classification score')
-        logger.info('-' * 60)
-        logger.info(classification_report(true_labels, predicted_labels))
+        logger.info('F1 score: %.2f', f1_score(true_labels, predicted_labels, average='macro'))
 
-        predicted_binary = prediction[:, dataset.label_lookup['4top']] >= 0.5
-        true_binary = actual[:, dataset.label_lookup['4top']].astype(bool)
+        prediction_binary = prediction[:, dataset.label_lookup['4top']]
+        true_binary = actual[:, dataset.label_lookup['4top']]
 
-        logger.info('-' * 60)
-        logger.info('Multi to binary classification score (>= 0.5)')
-        logger.info('-' * 60)
-        logger.info(classification_report(true_binary, predicted_binary))
+        logger.info('Binary ROC score: %.4f', roc_auc_score(true_binary, prediction_binary))
 
-        predicted_binary_2 = predicted_labels == dataset.label_lookup['4top']
+        predicted_binary_labels = prediction[:, dataset.label_lookup['4top']] >= 0.5
+        true_binary_labels = actual[:, dataset.label_lookup['4top']].astype(bool)
 
-        logger.info('-' * 60)
-        logger.info('Multi to binary classification score (max)')
-        logger.info('-' * 60)
-        logger.info(classification_report(true_binary, predicted_binary_2))
+        logger.info('Binary F1 score: %.2f', f1_score(true_binary_labels, predicted_binary_labels))
 
-    elif method == 'binary' and log:
+        predicted_binary_labels_max = predicted_labels == dataset.label_lookup['4top']
+
+        logger.info('Binary F1 score (max): %.2f', f1_score(true_binary_labels, predicted_binary_labels_max))
+
+        # logger.info('-' * 60)
+        # logger.info('Multi-label classification score')
+        # logger.info('-' * 60)
+        # logger.info(classification_report(true_labels, predicted_labels))
+        #
+        # logger.info('-' * 60)
+        # logger.info('Multi to binary classification score (>= 0.5)')
+        # logger.info('-' * 60)
+        # logger.info(classification_report(true_binary_labels, predicted_binary_labels))
+        #
+        # logger.info('-' * 60)
+        # logger.info('Multi to binary classification score (max)')
+        # logger.info('-' * 60)
+        # logger.info(classification_report(true_binary_labels, predicted_binary_labels_max))
+
+    elif method == 'binary':
         predicted_labels = prediction.reshape((-1,)) >= 0.5
         true_labels = actual.reshape((-1,))
 
-        logger.info('-' * 60)
-        logger.info('Binary classification score')
-        logger.info('-' * 60)
-        logger.info(classification_report(true_labels, predicted_labels))
+        logger.info('F1 score: %.2f', f1_score(true_labels, predicted_labels))
+
+        # logger.info('-' * 60)
+        # logger.info('Binary classification score')
+        # logger.info('-' * 60)
+        # logger.info(classification_report(true_labels, predicted_labels))
 
     return model
 
@@ -219,6 +234,16 @@ def test_masking(epochs: int):
         create_and_train_model(dataset, 'recurrent', method, epochs, log=True, save_model=False)
 
 
+def train_binary(epochs: int):
+    dataset = Dataset(FILENAME)
+
+    for model_type in MODELS:
+        for shuffle in [False, True]:
+            for noise in [0, 0.1]:
+                create_and_train_model(dataset, model_type, 'binary', epochs, log=False, save_model=False,
+                                       shuffle_objects=shuffle, noise_amount=noise)
+
+
 def train_all(epochs: int):
     dataset = Dataset(FILENAME)
 
@@ -226,11 +251,11 @@ def train_all(epochs: int):
         for method in ['binary', 'multi']:
             for shuffle in [False, True]:
                 for noise in [0, 0.1]:
-                    create_and_train_model(dataset, model_type, method, epochs, log=True, save_model=False,
+                    create_and_train_model(dataset, model_type, method, epochs, log=False, save_model=False,
                                            shuffle_objects=shuffle, noise_amount=noise)
                 gc.collect()
 
 
 if __name__ == '__main__':
     setup()
-    train_all(200)
+    train_binary(200)

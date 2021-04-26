@@ -39,7 +39,7 @@ def create_model(model_type, input_size, method='binary', summary=True):
         raise ValueError(f'Method "{method}" not supported')
 
     model = keras.Model(inputs=inputs, outputs=activation)
-    model.compile(optimizer='adam', loss=loss, metrics='acc')
+    model.compile(optimizer='adam', loss=loss, metrics=['acc', keras.metrics.AUC(name='auc')])
 
     if summary:
         model.summary()

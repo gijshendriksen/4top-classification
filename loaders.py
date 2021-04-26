@@ -7,19 +7,19 @@ from tensorflow import keras
 
 
 class DataLoader(keras.utils.Sequence, ABC):
-    def __init__(self, data_events: np.array, data_objects: np.array, labels: np.array,
+    def __init__(self, data_events: np.array, data_objects: np.array, labels: Optional[np.array] = None,
                  batch_size: int = 64, shuffle_data: bool = True, shuffle_objects: bool = False,
                  noise_amount: float = 0.0):
         self.data_events = tf.convert_to_tensor(data_events)
         self.data_objects = tf.convert_to_tensor(data_objects)
-        self.labels = tf.convert_to_tensor(labels)
+        self.labels = labels
 
         self.batch_size = batch_size
         self.shuffle_data = shuffle_data
         self.shuffle_objects = shuffle_objects
         self.noise_amount = noise_amount
 
-        self.idx = np.arange(self.labels.shape[0])
+        self.idx = np.arange(self.data_events.shape[0])
 
         self.on_epoch_end()
 
@@ -31,6 +31,15 @@ class DataLoader(keras.utils.Sequence, ABC):
     @abstractmethod
     def get_inputs(self, idx: Optional[np.array] = None) -> Union[np.array, List[np.array]]:
         pass
+
+    def get_labels(self, idx: Optional[np.array] = None) -> np.array:
+        if self.labels is None:
+            raise ValueError('Labels not available during test time')
+
+        if idx is None:
+            return self.labels
+
+        return self.labels[idx]
 
     def get_data_by_index(self, idx: Optional[np.array] = None):
         if idx is None:
@@ -66,7 +75,7 @@ class DataLoader(keras.utils.Sequence, ABC):
 
     def __getitem__(self, index: int) -> Tuple[Union[np.array, List[np.array]], np.array]:
         idx = self.idx[index * self.batch_size:(index + 1) * self.batch_size]
-        return self.get_inputs(idx), tf.gather(self.labels, idx)
+        return self.get_inputs(idx), self.get_labels(idx)
 
     def __len__(self) -> int:
         return self.idx.shape[0] // self.batch_size
