@@ -14,16 +14,18 @@ from dataset import Dataset
 from loaders import DataLoader
 from models import MODELS, create_model
 
+# Uncomment if running on local device to enable correct GPU training
 # physical_devices = tf.config.list_physical_devices('GPU')
 # tf.config.experimental.set_memory_growth(physical_devices[0], enable=True)
 
 
 FILENAME = 'TrainingValidationData_200k_shuffle.csv'
 
+# Batch sizes for each model type
 DENSE_BATCH_SIZE = 1000
 REC_BATCH_SIZE = 1000
 CONV_BATCH_SIZE = 1000
-PERM_BATCH_SIZE = 500
+PERM_BATCH_SIZE = 1000
 
 BATCH_SIZES = {
     'dense': DENSE_BATCH_SIZE,
@@ -32,8 +34,13 @@ BATCH_SIZES = {
     'permutation': PERM_BATCH_SIZE,
 }
 
+# Amount of epochs to use for each experiment
+EPOCHS = 200
+
+# Timestamp of the current training session, to use for logging
 TIMESTAMP = datetime.now().strftime('%Y%m%d-%H%M')
 
+# Directories for logging, saved models and cache
 TENSORBOARD_DIR = './tensorboard'
 MODEL_DIR = f'./saved_models/{TIMESTAMP}'
 LOG_DIR = f'./logs/{TIMESTAMP}'
@@ -44,6 +51,9 @@ logger = logging.getLogger('model_training')
 
 
 def setup():
+    """
+    Creates the necessary directories for the training session, and sets up the logger.
+    """
     os.makedirs(TENSORBOARD_DIR, exist_ok=True)
     os.makedirs(MODEL_DIR, exist_ok=True)
     os.makedirs(LOG_DIR, exist_ok=True)
@@ -56,6 +66,19 @@ def setup():
 
 def train_model(model: keras.Model, data_train: DataLoader, data_validation: DataLoader,
                 epochs: int = 50, save_model: bool = True, log: bool = True, slug: Optional[str] = None):
+    """
+    Trains a model using the specified train and validation data. Adds callbacks for early stopping and
+    reducing the learning rate on a plateau. Optionally adds a model checkpoint callback, as well as
+    callbacks for logging the training progress in Tensorboard and CSV files.
+
+    :param model: the model to train
+    :param data_train: the loader for the training data
+    :param data_validation: the loader for the validation data
+    :param epochs: the amount of epochs to train for
+    :param save_model: whether to save the best model in this training sequence
+    :param log: whether to log the training procedure to Tensorboard and CSV files
+    :param slug: the unique name to use for model saving and logging purposes. Required if save_model or log is True.
+    """
     if slug is None and (save_model or log):
         raise ValueError('Cannot save model or log training without a slug')
 
@@ -84,6 +107,18 @@ def train_model(model: keras.Model, data_train: DataLoader, data_validation: Dat
 def create_and_train_model(dataset: Dataset, model_type: str, method: str, epochs: int = 50,
                            shuffle_objects: bool = False, noise_amount: float = 0.0,
                            save_model: bool = True, log: bool = True):
+    """
+    Creates, trains and validates a model on the specified dataset.
+
+    :param dataset: the dataset to use for training
+    :param model_type: the type of model to use for training (e.g. 'dense' or 'permutation_deep')
+    :param method: the classification method ('binary' or 'multi')
+    :param epochs: the amount of epochs to train for
+    :param shuffle_objects: whether to apply the object shuffle augmentation method
+    :param noise_amount: amount of Gaussian noise to add as augmentation. Use 0 to disable.
+    :param save_model: whether to save the best model in this training sequence
+    :param log: whether to log the training procedure to Tensorboard and CSV files
+    """
     batch_size = BATCH_SIZES[model_type.split('_')[0]]
     data_train = dataset.train_loader(model_type, method, batch_size=batch_size,
                                       shuffle_objects=shuffle_objects, noise_amount=noise_amount)
@@ -160,55 +195,6 @@ def create_and_train_model(dataset: Dataset, model_type: str, method: str, epoch
     return model
 
 
-def try_combination(epochs: int):
-    dataset = Dataset(FILENAME)
-
-    batch_size = BATCH_SIZES['permutation']
-
-    data_train_binary = dataset.train_loader('permutation', 'binary', batch_size=batch_size)
-    data_validation_binary = dataset.validation_loader('permutation', 'binary', batch_size=batch_size)
-
-    data_train_multi = dataset.train_loader('permutation', 'multi', batch_size=batch_size)
-    data_validation_multi = dataset.validation_loader('permutation', 'multi', batch_size=batch_size)
-
-    binary_model = create_model('permutation', method='binary', input_size=data_train_binary.input_size, summary=True)
-    multi_model = create_model('permutation', method='multi', input_size=data_train_multi.input_size, summary=True)
-
-    train_model(binary_model, data_train_binary, data_validation_binary, epochs=epochs, save_model=False, log=True,
-                slug='perm_test')
-    train_model(multi_model, data_train_multi, data_validation_multi, epochs=epochs, save_model=False, log=False)
-
-    pred_binary = binary_model.predict(data_validation_binary.get_inputs(), batch_size=batch_size)
-    pred_multi = multi_model.predict(data_validation_multi.get_inputs(), batch_size=batch_size)
-
-    pred_backgrounds = 1 - pred_binary
-    factors = np.concatenate([pred_binary, pred_backgrounds, pred_backgrounds, pred_backgrounds, pred_backgrounds], axis=1)
-
-    prediction = np.multiply(factors, pred_multi)
-
-    normalized = prediction/prediction.sum(axis=1, keepdims=1)
-
-    single_binary = pred_binary.reshape((-1,)) >= 0.5
-    combined_binary = normalized[:, 0] >= 0.5
-    true_binary = data_validation_binary.y.reshape((-1,))
-
-    single_multi = np.argmax(pred_multi, axis=1)
-    combined_multi = np.argmax(normalized, axis=1)
-    true_multi = np.argmax(data_validation_multi.y, axis=1)
-
-    print('==== ORIGINAL BINARY ====')
-    print(classification_report(true_binary, single_binary))
-
-    print('==== ORIGINAL MULTI =====')
-    print(classification_report(true_multi, single_multi))
-
-    print('==== COMBINED BINARY ====')
-    print(classification_report(true_binary, combined_binary))
-
-    print('==== COMBINED MULTI =====')
-    print(classification_report(true_multi, combined_multi))
-
-
 def experiment1(epochs: int):
     dataset = Dataset(FILENAME)
 
@@ -227,13 +213,6 @@ def experiment2(epochs: int):
         create_and_train_model(dataset, model_type, 'multi', epochs, log=True, save_model=False)
 
 
-def test_masking(epochs: int):
-    dataset = Dataset(FILENAME)
-
-    for method in ['binary', 'multi']:
-        create_and_train_model(dataset, 'recurrent', method, epochs, log=True, save_model=False)
-
-
 def train_binary(epochs: int):
     dataset = Dataset(FILENAME)
 
@@ -244,18 +223,8 @@ def train_binary(epochs: int):
                                        shuffle_objects=shuffle, noise_amount=noise)
 
 
-def train_all(epochs: int):
-    dataset = Dataset(FILENAME)
-
-    for model_type in MODELS:
-        for method in ['binary', 'multi']:
-            for shuffle in [False, True]:
-                for noise in [0, 0.1]:
-                    create_and_train_model(dataset, model_type, method, epochs, log=False, save_model=False,
-                                           shuffle_objects=shuffle, noise_amount=noise)
-                gc.collect()
-
-
 if __name__ == '__main__':
     setup()
-    train_binary(200)
+    experiment1(EPOCHS)
+    experiment2(EPOCHS)
+    train_binary(EPOCHS)

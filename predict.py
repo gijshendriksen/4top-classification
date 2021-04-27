@@ -1,10 +1,27 @@
 import argparse
 
+import numpy as np
+
 from models import MODELS, create_model
 from dataset import Dataset
 
 
-def predict(filename: str, model_path: str, classification: str, model_type: str):
+TRAIN_PRIORS = np.array([0.5, 0.125, 0.125, 0.125, 0.125])
+TEST_PRIORS = np.array([0.04, 0.02, 0.19, 0.51, 0.24])
+
+BINARY_TRAIN_PRIORS = np.array([0.5, 0.5])
+BINARY_TEST_PRIORS = np.array([0.04, 0.96])
+
+
+def shift_priors(predictions: np.array, prior_train: np.array, prior_test: np.array):
+    assert predictions.shape[1] == prior_train.shape[0]
+    assert predictions.shape[1] == prior_test.shape[0]
+
+    shifted = predictions / prior_train * prior_test
+    return shifted / np.sum(shifted, axis=1, keepdims=True)
+
+
+def predict(filename: str, model_path: str, output: str, classification: str, model_type: str, prior_shifting: bool):
     dataset = Dataset(filename, testing=True)
     data_loader = dataset.test_loader(model_type, shuffle_data=False)
 
@@ -13,6 +30,15 @@ def predict(filename: str, model_path: str, classification: str, model_type: str
 
     predictions = model.predict(data_loader.get_inputs(), batch_size=500)
 
+    if prior_shifting:
+        # Perform prior shifting
+        if classification == 'binary':
+            predictions = np.concatenate([predictions, 1 - predictions], axis=1)
+            predictions = shift_priors(predictions, BINARY_TRAIN_PRIORS, BINARY_TEST_PRIORS)
+            predictions = predictions[:, :1]
+        else:
+            predictions = shift_priors(predictions, TRAIN_PRIORS, TEST_PRIORS)
+
     lines = []
     for eid, scores in zip(dataset.event_ids, predictions):
         line = [str(eid)]
@@ -20,9 +46,10 @@ def predict(filename: str, model_path: str, classification: str, model_type: str
         for i, prob in enumerate(scores):
             line.append(f'{dataset.labels[i]} = {prob}')
 
-        lines.append(','.join(line))
+        lines.append(', '.join(line))
 
-    print('\n'.join(lines))
+    with open(output, 'w') as _file:
+        _file.write('\n'.join(lines))
 
 
 if __name__ == '__main__':
@@ -31,10 +58,12 @@ if __name__ == '__main__':
     parser.add_argument('filename', help='The file containing the test data')
     parser.add_argument('model_path', help='The file containing the trained model')
 
+    parser.add_argument('-o', '--output', help='The output file for the prediction', default='predictions.csv')
     parser.add_argument('-c', '--classification', help='Whether to perform binary or multi class classification',
                         choices=['binary', 'multi'], default='binary')
     parser.add_argument('-m', '--model-type', help='Which type of model to use for the prediction',
                         choices=list(MODELS), default='dense')
+    parser.add_argument('-p', '--prior-shifting', help='Enable prior shifting', action='store_true')
 
     args = parser.parse_args()
 

@@ -113,36 +113,43 @@ class Dataset:
 
         return event_scaler, object_scaler
 
-    @cache_np('./cache/event_data.npy')
     def generate_event_data(self) -> np.array:
         """
         Returns the basic data for all events.
         Output shape: (N, 2)
         """
-        event_data = self.event_scaler.transform([
-            [e.met, e.metphi]
-            for e in tqdm(self.data, desc='Generating event inputs')
-        ])
+        @cache_np('./cache/event_data.npy', use_cache=not self.testing)
+        def _generate_event_data():
+            event_data = self.event_scaler.transform([
+                [e.met, e.metphi]
+                for e in tqdm(self.data, desc='Generating event inputs')
+            ])
 
-        assert event_data.shape == (self.num_samples, 2)
+            assert event_data.shape == (self.num_samples, 2)
 
-        return event_data
+            return event_data
 
-    @cache_np('./cache/object_data.npy')
+        return _generate_event_data()
+
     def generate_object_data(self) -> np.array:
         """
         Returns the object data for all events.
         Output shape: (N, max_objects, num_classes + 5)
         """
-        object_data = np.array([
-            self._objects_to_input(e)
-            for e in tqdm(self.data, desc='Generating object inputs')
-        ])
 
-        expected_shape = self.num_samples, self.num_objects, self.num_classes + 5
-        assert object_data.shape == expected_shape, f'Expected shape {expected_shape}, got {object_data.shape}'
+        @cache_np('./cache/object_data.npy', use_cache=not self.testing)
+        def _generate_object_data():
+            object_data = np.array([
+                self._objects_to_input(e)
+                for e in tqdm(self.data, desc='Generating object inputs')
+            ])
 
-        return object_data
+            expected_shape = self.num_samples, self.num_objects, self.num_classes + 5
+            assert object_data.shape == expected_shape, f'Expected shape {expected_shape}, got {object_data.shape}'
+
+            return object_data
+
+        return _generate_object_data()
 
     def _objects_to_input(self, event: Event) -> np.array:
         """
@@ -170,33 +177,41 @@ class Dataset:
 
         return result
 
-    @cache_np('./cache/binary_labels.npy')
     def generate_binary_labels(self):
         """
         Returns a numpy array containing labels for the binary task.
         Output shape: (num_samples, 1)
         """
-        binary_labels = np.array([
-            e.pid == '4top' for e in tqdm(self.data, desc='Generating binary labels')
-        ])
 
-        assert binary_labels.shape == (self.num_samples, )
+        @cache_np('./cache/binary_labels.npy', use_cache=not self.testing)
+        def _generate_binary_labels():
+            binary_labels = np.array([
+                e.pid == '4top' for e in tqdm(self.data, desc='Generating binary labels')
+            ])
 
-        return binary_labels
+            assert binary_labels.shape == (self.num_samples, )
 
-    @cache_np('./cache/multiclass_labels.npy')
+            return binary_labels
+
+        return _generate_binary_labels()
+
     def generate_multiclass_labels(self):
         """
         Returns a numpy array containing labels for the binary task.
         Output shape: (num_samples, num_classes)
         """
-        multiclass_labels = keras.utils.to_categorical([
-            self.label_lookup[e.pid] for e in tqdm(self.data, desc='Generating multi-class labels')
-        ], num_classes=self.num_labels)
 
-        assert multiclass_labels.shape == (self.num_samples, self.num_labels)
+        @cache_np('./cache/multiclass_labels.npy', use_cache=not self.testing)
+        def _generate_multiclass_labels():
+            multiclass_labels = keras.utils.to_categorical([
+                self.label_lookup[e.pid] for e in tqdm(self.data, desc='Generating multi-class labels')
+            ], num_classes=self.num_labels)
 
-        return multiclass_labels
+            assert multiclass_labels.shape == (self.num_samples, self.num_labels)
+
+            return multiclass_labels
+
+        return _generate_multiclass_labels()
 
     def _loader(self, loader: str, output: str, idx: np.array, **kwargs) -> DataLoader:
         if self.testing:
