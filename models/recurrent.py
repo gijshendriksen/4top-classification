@@ -1,8 +1,16 @@
+from typing import List, Tuple, Union
+
+import tensorflow as tf
 from tensorflow import keras
 from tensorflow.keras import layers
 
 
-def create_recurrent_model(input_size):
+def create_recurrent_model(input_size: Tuple[int, ...]) -> Tuple[Union[tf.Tensor, List[tf.Tensor]], tf.Tensor]:
+    """
+    Creates a recurrent neural network with 4 stacked LSTMs, each with a hidden state of size 64.
+
+    The output layer and activation are omitted, as they are added by the wrapper function.
+    """
     input_cont = keras.Input((2,))
     input_rec = keras.Input(input_size)
 
@@ -26,7 +34,13 @@ def create_recurrent_model(input_size):
     return [input_cont, input_rec], out
 
 
-def create_recurrent_model_dropout(input_size):
+def create_recurrent_model_dropout(input_size: Tuple[int, ...]) -> Tuple[Union[tf.Tensor, List[tf.Tensor]], tf.Tensor]:
+    """
+    Creates a recurrent neural network with 4 stacked LSTMs, each with a hidden state of size 128 and followed
+    by a dropout of 0.2.
+
+    The output layer and activation are omitted, as they are added by the wrapper function.
+    """
     input_cont = keras.Input((2,))
     input_rec = keras.Input(input_size)
 
@@ -53,7 +67,12 @@ def create_recurrent_model_dropout(input_size):
     return [input_cont, input_rec], out
 
 
-def create_recurrent_model_wide(input_size):
+def create_recurrent_model_wide(input_size: Tuple[int, ...]) -> Tuple[Union[tf.Tensor, List[tf.Tensor]], tf.Tensor]:
+    """
+    Creates a recurrent neural network with 4 stacked LSTMs, each with a hidden state of size 128.
+
+    The output layer and activation are omitted, as they are added by the wrapper function.
+    """
     input_cont = keras.Input((2,))
     input_rec = keras.Input(input_size)
 

@@ -1,14 +1,12 @@
-from datetime import datetime
-import gc
 import logging
 import os
 import sys
+from datetime import datetime
 from typing import Optional
 
-from tensorflow import keras
-
 import numpy as np
-from sklearn.metrics import classification_report, f1_score, roc_auc_score
+from sklearn.metrics import f1_score, roc_auc_score
+from tensorflow import keras
 
 from dataset import Dataset
 from loaders import DataLoader
@@ -137,7 +135,7 @@ def create_and_train_model(dataset: Dataset, model_type: str, method: str, epoch
                 f'shuffle={shuffle_objects}, noise={noise_amount})')
     logger.info('=' * 70)
 
-    model = create_model(model_type=model_type, method=method, input_size=data_train.input_size)
+    model = create_model(model_type=model_type, output=method, input_size=data_train.input_size)
 
     train_model(model, data_train, data_validation, epochs=epochs, save_model=save_model, log=log, slug=slug)
 
@@ -166,36 +164,19 @@ def create_and_train_model(dataset: Dataset, model_type: str, method: str, epoch
 
         logger.info('Binary F1 score (max): %.2f', f1_score(true_binary_labels, predicted_binary_labels_max))
 
-        # logger.info('-' * 60)
-        # logger.info('Multi-label classification score')
-        # logger.info('-' * 60)
-        # logger.info(classification_report(true_labels, predicted_labels))
-        #
-        # logger.info('-' * 60)
-        # logger.info('Multi to binary classification score (>= 0.5)')
-        # logger.info('-' * 60)
-        # logger.info(classification_report(true_binary_labels, predicted_binary_labels))
-        #
-        # logger.info('-' * 60)
-        # logger.info('Multi to binary classification score (max)')
-        # logger.info('-' * 60)
-        # logger.info(classification_report(true_binary_labels, predicted_binary_labels_max))
-
     elif method == 'binary':
         predicted_labels = prediction.reshape((-1,)) >= 0.5
         true_labels = actual.reshape((-1,))
 
         logger.info('F1 score: %.2f', f1_score(true_labels, predicted_labels))
 
-        # logger.info('-' * 60)
-        # logger.info('Binary classification score')
-        # logger.info('-' * 60)
-        # logger.info(classification_report(true_labels, predicted_labels))
-
     return model
 
 
 def experiment1(epochs: int):
+    """
+    Performs the first experiment, in which we train the dense models for the binary task.
+    """
     dataset = Dataset(FILENAME)
 
     models = ['dense', 'dense_deep', 'dense_wide']
@@ -205,6 +186,9 @@ def experiment1(epochs: int):
 
 
 def experiment2(epochs: int):
+    """
+    Performs the second experiment, in which we train the dense models for the multi-class task.
+    """
     dataset = Dataset(FILENAME)
 
     models = ['dense', 'dense_deep', 'dense_wide']
@@ -214,6 +198,9 @@ def experiment2(epochs: int):
 
 
 def train_binary(epochs: int):
+    """
+    Trains all models on the binary task, for every combination of augmentation methods.
+    """
     dataset = Dataset(FILENAME)
 
     for model_type in MODELS:
@@ -223,8 +210,48 @@ def train_binary(epochs: int):
                                        shuffle_objects=shuffle, noise_amount=noise)
 
 
+def train_multi(epochs: int):
+    """
+    Trains all models on the multi-class task, for every combination of augmentation methods.
+    """
+    dataset = Dataset(FILENAME)
+
+    for model_type in MODELS:
+        for shuffle in [False, True]:
+            for noise in [0, 0.1]:
+                create_and_train_model(dataset, model_type, 'multi', epochs, log=False, save_model=False,
+                                       shuffle_objects=shuffle, noise_amount=noise)
+
+
+def train_final(epochs: int):
+    """
+    Trains the best performing methods for each assignment one final time, to save the correct weights for handing in.
+    """
+    dataset = Dataset(FILENAME)
+
+    # Assignment 1: binary dense network
+    # The standard dense network performs equally well as the others
+    create_and_train_model(dataset, 'dense', 'binary', epochs, log=False, save_model=True)
+
+    # Assignment 2: multi-class dense network
+    # The standard dense network outperforms the others
+    create_and_train_model(dataset, 'simple', 'multi', epochs, log=False, save_model=True)
+
+    # Assignment 3: multi-class dense network used for binary classification
+    # For this task, we used the best dense multi-class network, i.e. the one from assignment 2
+
+    # Assignment 4: best performing binary and multi-class classifiers
+    # The best binary model is the standard recurrent model with object shuffling
+    create_and_train_model(dataset, 'recurrent', 'binary', epochs, log=False, save_model=True, shuffle_objects=True)
+
+    # The best multi-class model is the recurrent model with dropout without augmentation
+    create_and_train_model(dataset, 'recurrent_dropout', 'multi', epochs, log=False, save_model=True)
+
+
 if __name__ == '__main__':
     setup()
-    experiment1(EPOCHS)
-    experiment2(EPOCHS)
-    train_binary(EPOCHS)
+    # experiment1(EPOCHS)
+    # experiment2(EPOCHS)
+    # train_binary(EPOCHS)
+    # train_multi(EPOCHS)
+    train_final(EPOCHS)

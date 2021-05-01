@@ -2,18 +2,23 @@ import argparse
 
 import numpy as np
 
-from models import MODELS, create_model
 from dataset import Dataset
+from models import MODELS, create_model
 
-
+# The train and test priors for the multi-class classification task
 TRAIN_PRIORS = np.array([0.5, 0.125, 0.125, 0.125, 0.125])
 TEST_PRIORS = np.array([0.04, 0.02, 0.19, 0.51, 0.24])
 
+# The train and test priors for the binary classification task
 BINARY_TRAIN_PRIORS = np.array([0.5, 0.5])
 BINARY_TEST_PRIORS = np.array([0.04, 0.96])
 
 
-def shift_priors(predictions: np.array, prior_train: np.array, prior_test: np.array):
+def shift_priors(predictions: np.array, prior_train: np.array, prior_test: np.array) -> np.array:
+    """
+    Performs prior shifting by dividing predictions by the train prior, multiplying them with the test prior and
+    normalising the result.
+    """
     assert predictions.shape[1] == prior_train.shape[0]
     assert predictions.shape[1] == prior_test.shape[0]
 
@@ -22,10 +27,24 @@ def shift_priors(predictions: np.array, prior_train: np.array, prior_test: np.ar
 
 
 def predict(filename: str, model_path: str, output: str, classification: str, model_type: str, prior_shifting: bool):
+    """
+    Performs a prediction on the specified test data.
+
+    Note that the weights must match the specified model type and classification method.
+
+    :param filename: the test data, in correct CSV format.
+    :param model_path: the .hdf5 file containing the weights of the trained model.
+    :param output: the CSV file to which to save the predictions
+    :param classification: whether to use binary ('binary') or multi-class ('multi') classification
+    :param model_type: the type of model to use for the prediction (e.g. 'dense' or 'permutation_deep')
+    :param prior_shifting: whether to shift the priors, i.e. whether to re-balance the model's output to match the
+        distribution of the test data.
+    """
+
     dataset = Dataset(filename, testing=True)
     data_loader = dataset.test_loader(model_type, shuffle_data=False)
 
-    model = create_model(model_type, data_loader.input_size, method=classification, summary=False)
+    model = create_model(model_type, data_loader.input_size, output=classification, summary=False)
     model.load_weights(model_path)
 
     predictions = model.predict(data_loader.get_inputs(), batch_size=500)

@@ -1,10 +1,22 @@
+from typing import List, Tuple, Union
+
+import tensorflow as tf
 from tensorflow import keras
 from tensorflow.keras import layers
 
-from custom_layers import NINLayer, PermutationLayer
+from models.custom_layers import NINLayer, PermutationLayer
 
 
-def permutation_block(num_layers, num_units=128):
+def permutation_block(num_layers: int, num_units: int = 128) -> PermutationLayer:
+    """
+    Creates a permutation block by concatenating multiple network-in-network layers and wrapping them in
+    a permutation layer.
+
+    :param num_layers: the amount of dense layers to contain within the permutation layer.
+    :param num_units: the size of the dense layers within the permutation layer.
+
+    :return: the constructed permutation layer.
+    """
     subnet = keras.Sequential([
         NINLayer(num_units) for _ in range(num_layers)
     ])
@@ -12,7 +24,12 @@ def permutation_block(num_layers, num_units=128):
     return PermutationLayer(subnet)
 
 
-def create_permutation_model(input_size):
+def create_permutation_model(input_size: Tuple[int, ...]) -> Tuple[Union[tf.Tensor, List[tf.Tensor]], tf.Tensor]:
+    """
+    Creates a permutation-invariant neural network with 4 permutation blocks, each with 4 dense layers of size 128.
+
+    The output layer and activation are omitted, as they are added by the wrapper function.
+    """
     input_cont = keras.Input((2,))
     input_obj = keras.Input(input_size)
 
@@ -37,7 +54,12 @@ def create_permutation_model(input_size):
     return [input_cont, input_obj], out
 
 
-def create_permutation_model_deep(input_size):
+def create_permutation_model_deep(input_size: Tuple[int, ...]) -> Tuple[Union[tf.Tensor, List[tf.Tensor]], tf.Tensor]:
+    """
+    Creates a permutation-invariant neural network with 4 permutation blocks, each with 8 dense layers of size 128.
+
+    The output layer and activation are omitted, as they are added by the wrapper function.
+    """
     input_cont = keras.Input((2,))
     input_obj = keras.Input(input_size)
 
@@ -62,7 +84,12 @@ def create_permutation_model_deep(input_size):
     return [input_cont, input_obj], out
 
 
-def create_permutation_model_wide(input_size):
+def create_permutation_model_wide(input_size: Tuple[int, ...]) -> Tuple[Union[tf.Tensor, List[tf.Tensor]], tf.Tensor]:
+    """
+    Creates a permutation-invariant neural network with 4 permutation blocks, each with 4 dense layers of size 256.
+
+    The output layer and activation are omitted, as they are added by the wrapper function.
+    """
     input_cont = keras.Input((2,))
     input_obj = keras.Input(input_size)
 
@@ -85,4 +112,3 @@ def create_permutation_model_wide(input_size):
     # out = layers.Dense(1, activation='sigmoid')(dense4)
 
     return [input_cont, input_obj], out
-

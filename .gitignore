@@ -11,3 +11,6 @@ tensorboard/
 
 # Data
 *.csv
+
+# Files for handing in
+final/

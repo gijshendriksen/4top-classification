@@ -1,10 +1,13 @@
-from functools import wraps
 import os
+from functools import wraps
 
 import numpy as np
 
 
-def cache_np(filename: str, use_cache: bool):
+def cache_np(filename: str, use_cache: bool = True):
+    """
+    Decorator that caches the result of a function that produces a Numpy array.
+    """
     def wrapper(func):
         @wraps(func)
         def with_caching(*args, **kwargs):

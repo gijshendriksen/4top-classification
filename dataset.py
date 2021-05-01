@@ -1,36 +1,31 @@
-from typing import Callable, Dict, List, Optional, Union, Tuple
+from typing import Callable, Dict, List, Optional, Tuple, Union
 
-from sklearn.base import BaseEstimator, TransformerMixin
-from sklearn.preprocessing import StandardScaler
-from sklearn.model_selection import train_test_split
 import numpy as np
+from sklearn.base import BaseEstimator, TransformerMixin
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
 from tensorflow import keras
 from tqdm import tqdm
 
 from data import Event
-from loaders import DataLoader, SimpleLoader, RecurrentLoader, ConvolutionLoader, PermutationLoader
+from loaders import (ConvolutionLoader, DataLoader, PermutationLoader,
+                     RecurrentLoader, DenseLoader)
 from utils import cache_np
 
 
 class DataScaler(BaseEstimator, TransformerMixin):
+    """
+    A custom scaler class which converts each feature to zero mean and unit variance,
+    using pre-calculated mean and scale values.
+    """
+
     def __init__(self, mean: np.array, scale: np.array):
         self.mean = mean
         self.scale = scale
 
     def transform(self, X):
-        """Perform standardization by centering and scaling
-
-        Parameters
-        ----------
-        X : {array-like, sparse matrix of shape (n_samples, n_features)
-            The data used to scale along the features axis.
-        copy : bool, default=None
-            Copy the input X or not.
-
-        Returns
-        -------
-        X_tr : {ndarray, sparse matrix} of shape (n_samples, n_features)
-            Transformed array.
+        """
+        Perform standardization by centering and scaling
         """
         X = np.asarray(X)
         X -= self.mean
@@ -40,8 +35,16 @@ class DataScaler(BaseEstimator, TransformerMixin):
 
 
 class Dataset:
+    """
+    Wrapper class for the dataset, both for training and testing purposes.
+
+    Reads the data from a CSV file and converts it to normalised feature representations. During training, splits
+    the dataset into a training and validation part. Is able to construct data loaders for different types of models,
+    which can be fed into the corresponding neural network.
+    """
+
     loaders: Dict[str, Callable[..., DataLoader]] = {
-        'dense': SimpleLoader,
+        'dense': DenseLoader,
         'recurrent': RecurrentLoader,
         'convolution': ConvolutionLoader,
         'permutation': PermutationLoader,
@@ -58,6 +61,17 @@ class Dataset:
 
     def __init__(self, filename: str, train_size: float = 0.75, testing: bool = False,
                  limit: Optional[int] = None):
+        """
+        Constructs the dataset instance.
+
+        :param filename: the file to read the data from. Must be a CSV in the correct format.
+        :param train_size: the fraction of the data to use for training. The rest is used for validation.
+            This parameter is ignored during test time.
+        :param testing: whether the dataset is used for testing purposes. If set to True, the dataset is not split
+            into training and validation data.
+        :param limit: optional integer to denote the maximum amount of events to load. Useful for debugging purposes.
+        """
+
         self.filename = filename
         self.testing = testing
         self.limit = limit
@@ -89,6 +103,9 @@ class Dataset:
                                                                    stratify=self.multiclass_labels.argmax(axis=1))
 
     def load_data(self) -> List[Event]:
+        """
+        Reads the event data from the CSV file.
+        """
         with open(self.filename) as _file:
             lines = _file.readlines()
 
@@ -100,11 +117,21 @@ class Dataset:
         return data
 
     def create_scalers(self) -> Union[Tuple[StandardScaler, StandardScaler], Tuple[DataScaler, DataScaler]]:
+        """
+        Creates the scalers used for normalising the feature representations. For the object data, only the
+        continuous features are normalised.
+
+        If the dataset is used for testing purposes, the pre-computed mean and variance of the training set are used.
+        If the dataset is used for training, the mean and variance are computed from all data in the dataset.
+        """
         if self.testing:
             event_scaler = DataScaler(self.event_mean_train, self.event_scale_train)
             object_scaler = DataScaler(self.object_mean_train, self.object_scale_train)
         else:
-            event_scaler = StandardScaler().fit([[e.met, e.metphi] for e in self.data])
+            event_scaler = StandardScaler().fit([
+                [e.met, e.metphi]
+                for e in self.data
+            ])
             object_scaler = StandardScaler().fit([
                 [o.e, o.pt, o.eta, o.phi]
                 for e in self.data
@@ -115,7 +142,9 @@ class Dataset:
 
     def generate_event_data(self) -> np.array:
         """
-        Returns the basic data for all events.
+        Returns the basic data for all events and normalises them using the event data scaler. Caches the result if
+        the dataset is used for training purposes.
+
         Output shape: (N, 2)
         """
         @cache_np('./cache/event_data.npy', use_cache=not self.testing)
@@ -133,10 +162,11 @@ class Dataset:
 
     def generate_object_data(self) -> np.array:
         """
-        Returns the object data for all events.
+        Returns the object data for all events and normalises them using the object data scaler. Caches the result if
+        the dataset is used for training purposes.
+
         Output shape: (N, max_objects, num_classes + 5)
         """
-
         @cache_np('./cache/object_data.npy', use_cache=not self.testing)
         def _generate_object_data():
             object_data = np.array([
@@ -154,21 +184,29 @@ class Dataset:
     def _objects_to_input(self, event: Event) -> np.array:
         """
         Returns a numpy array with the object data for a single event.
+
         Output shape: (num_objects, num_classes + 5)
         """
+        # If there is no object data, we pad the entire sequence using zeros.
         if not event.objects:
             return np.zeros((self.num_objects, self.num_classes + 5))
 
+        # The particle types are one-hot encoded.
         categorical = keras.utils.to_categorical([
             self.class_lookup[o.name] for o in event.objects
         ], num_classes=self.num_classes)
+        # The charges are simply extracted from the events, without normalisation.
         charges = np.array([[o.charge] for o in event.objects])
+        # The remaining, continuous features are scaled using the object scaler.
         continuous = self.object_scaler.transform([
             [o.e, o.pt, o.eta, o.phi]
             for o in event.objects
         ])
 
         result = np.concatenate([categorical, charges, continuous], axis=1)
+
+        # If the event does not have the maximum amount of objects,
+        # we have to pad the remaining sequences with zeros.
         if result.shape[0] < self.num_objects:
             padding = np.zeros((self.num_objects - result.shape[0], result.shape[1]))
             result = np.concatenate([result, padding], axis=0)
@@ -180,9 +218,10 @@ class Dataset:
     def generate_binary_labels(self):
         """
         Returns a numpy array containing labels for the binary task.
+        Caches the result if the dataset is used for training purposes.
+
         Output shape: (num_samples, 1)
         """
-
         @cache_np('./cache/binary_labels.npy', use_cache=not self.testing)
         def _generate_binary_labels():
             binary_labels = np.array([
@@ -197,7 +236,9 @@ class Dataset:
 
     def generate_multiclass_labels(self):
         """
-        Returns a numpy array containing labels for the binary task.
+        Returns a numpy array containing labels for the multi-class task.
+        Caches the result if the dataset is used for training purposes.
+
         Output shape: (num_samples, num_classes)
         """
 
@@ -214,6 +255,9 @@ class Dataset:
         return _generate_multiclass_labels()
 
     def _loader(self, loader: str, output: str, idx: np.array, **kwargs) -> DataLoader:
+        """
+        Returns a loader for the specified model, output type and samples corresponding to the given indices.
+        """
         if self.testing:
             raise ValueError('Cannot create training or validation loader at test time')
 
@@ -234,12 +278,15 @@ class Dataset:
         )
 
     def train_loader(self, loader: str, output: str, **kwargs) -> DataLoader:
+        """Returns a data loader for the training data"""
         return self._loader(loader, output, self.idx_train, **kwargs)
 
     def validation_loader(self, loader: str, output: str, **kwargs) -> DataLoader:
+        """Returns a data loader for the validation data"""
         return self._loader(loader, output, self.idx_validation, **kwargs)
 
     def test_loader(self, loader: str, **kwargs):
+        """Returns a data loader for the test data"""
         loader = loader.split('_')[0]
 
         return self.loaders[loader](

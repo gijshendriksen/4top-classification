@@ -1,8 +1,16 @@
+from typing import List, Tuple, Union
+
+import tensorflow as tf
 from tensorflow import keras
 from tensorflow.keras import layers
 
 
-def create_convolution_model(input_size):
+def create_convolution_model(input_size: Tuple[int, ...]) -> Tuple[Union[tf.Tensor, List[tf.Tensor]], tf.Tensor]:
+    """
+    Creates a convolutional neural network with kernel size 3 and max pooling after every convolution.
+
+    The output layer and activation are omitted, as they are added by the wrapper function.
+    """
     input_cont = keras.Input((2,))
     input_conv = keras.Input(input_size)
 
@@ -38,7 +46,12 @@ def create_convolution_model(input_size):
     return [input_cont, input_conv], out
 
 
-def create_convolution_model_single(input_size):
+def create_convolution_model_single(input_size: Tuple[int, ...]) -> Tuple[Union[tf.Tensor, List[tf.Tensor]], tf.Tensor]:
+    """
+    Creates a convolutional neural network with kernel size 1 and max pooling after every convolution.
+
+    The output layer and activation are omitted, as they are added by the wrapper function.
+    """
     input_cont = keras.Input((2,))
     input_conv = keras.Input(input_size)
 
@@ -74,7 +87,13 @@ def create_convolution_model_single(input_size):
     return [input_cont, input_conv], out
 
 
-def create_global_pooling_model(input_size):
+def create_global_pooling_model(input_size: Tuple[int, ...]) -> Tuple[Union[tf.Tensor, List[tf.Tensor]], tf.Tensor]:
+    """
+    Creates a convolutional neural network with kernel size 1, but without max pooling after every convolution.
+    Instead, a global max pooling is performed after all convolution steps are done.
+
+    The output layer and activation are omitted, as they are added by the wrapper function.
+    """
     input_cont = keras.Input((2,))
     input_conv = keras.Input(input_size)
 
