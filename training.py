@@ -235,7 +235,7 @@ def train_final(epochs: int):
 
     # Assignment 2: multi-class dense network
     # The standard dense network outperforms the others
-    create_and_train_model(dataset, 'simple', 'multi', epochs, log=False, save_model=True)
+    create_and_train_model(dataset, 'dense', 'multi', epochs, log=False, save_model=True)
 
     # Assignment 3: multi-class dense network used for binary classification
     # For this task, we used the best dense multi-class network, i.e. the one from assignment 2

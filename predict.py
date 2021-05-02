@@ -5,6 +5,11 @@ import numpy as np
 from dataset import Dataset
 from models import MODELS, create_model
 
+# Uncomment if running on local device to enable correct GPU training
+# physical_devices = tf.config.list_physical_devices('GPU')
+# tf.config.experimental.set_memory_growth(physical_devices[0], enable=True)
+
+
 # The train and test priors for the multi-class classification task
 TRAIN_PRIORS = np.array([0.5, 0.125, 0.125, 0.125, 0.125])
 TEST_PRIORS = np.array([0.04, 0.02, 0.19, 0.51, 0.24])
